@@ -1,0 +1,30 @@
+networks:
+  reviewer-net:
+    driver: bridge
+
+services:
+  api-ai:
+    build:
+      context: ./api-ai
+    container_name: api-ai
+    ports:
+      - "8000:8000"
+    networks:
+      - reviewer-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - reviewer-net
+    environment:
+      - AI_API_URL=http://api-ai:8000
+    depends_on:
+      - api-ai
+    restart: unless-stopped
