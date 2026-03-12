@@ -93,8 +93,8 @@ jobs:
             docker stop frontend api-ai 2>/dev/null || true
             docker rm frontend api-ai 2>/dev/null || true
             docker network create reviewer-net 2>/dev/null || true
-            docker pull ${{ secrets.DOCKER_USERNAME }}/ai-code-reviewer-api:latest
-            docker pull ${{ secrets.DOCKER_USERNAME }}/ai-code-reviewer-frontend:latest
+            docker pull merradferiel/ai-code-reviewer-api:latest
+            docker pull merradferiel/ai-code-reviewer-frontend:latest
             docker run -d --name api-ai --network reviewer-net --add-host host.docker.internal:host-gateway -p 8000:8000 --restart unless-stopped ${{ secrets.DOCKER_USERNAME }}/ai-code-reviewer-api:latest
             docker run -d --name frontend --network reviewer-net -p 3000:3000 -e AI_API_URL=http://api-ai:8000 --restart unless-stopped ${{ secrets.DOCKER_USERNAME }}/ai-code-reviewer-frontend:latest
             docker image prune -f
