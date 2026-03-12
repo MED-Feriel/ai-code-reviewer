@@ -45,18 +45,15 @@ def get_languages():
 
 @app.post("/review", response_model=ReviewResponse)
 async def review_code(request: ReviewRequest):
-    prompt = f"""Tu es un expert en revue de code. Analyse ce code {request.language} et fournis:
-1. Un résumé de ce que fait le code
-2. Les problèmes détectés (bugs, sécurité, performance)
-3. Les bonnes pratiques manquantes
-4. Des suggestions d'amélioration concrètes
-
-Code à analyser:
-```{request.language}
-{request.code}
-```
-
-Réponds en français de façon structurée et concise."""
+    prompt = (
+        f"Tu es un expert en revue de code. Analyse ce code {request.language} et fournis:\n"
+        f"1. Un résumé de ce que fait le code\n"
+        f"2. Les problèmes détectés (bugs, sécurité, performance)\n"
+        f"3. Les bonnes pratiques manquantes\n"
+        f"4. Des suggestions d'amélioration concrètes\n\n"
+        f"Code à analyser:\n{request.code}\n\n"
+        f"Réponds en français de façon structurée et concise."
+    )
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -79,15 +76,3 @@ Réponds en français de façon structurée et concise."""
         timestamp=datetime.utcnow().isoformat(),
         model="llama3.2"
     )
-```
-
----
-
-## Fichier 2 — `api-ai/requirements.txt`
-```
-fastapi==0.110.0
-uvicorn==0.29.0
-pydantic==2.6.4
-httpx==0.27.0
-pytest==8.1.0
-pytest-asyncio==0.23.6
