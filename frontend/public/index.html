@@ -4,252 +4,955 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Code Reviewer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root {
-      --bg: #ffffff;
-      --surface: #f8f9fa;
-      --border: #e1e4e8;
-      --text: #24292e;
-      --muted: #6a737d;
-      --accent: #0366d6;
-      --accent-light: #f1f8ff;
-      --green: #28a745;
-      --red: #d73a49;
-      --code-bg: #1e1e1e;
+      --black: #080c10;
+      --dark: #0d1117;
+      --dark2: #161b22;
+      --dark3: #21262d;
+      --border: #30363d;
+      --border2: #21262d;
+      --text: #e6edf3;
+      --muted: #7d8590;
+      --muted2: #484f58;
+      --accent: #58a6ff;
+      --accent2: #1f6feb;
+      --green: #3fb950;
+      --green-dim: #196127;
+      --red: #f85149;
+      --yellow: #e3b341;
+      --purple: #bc8cff;
+      --orange: #ffa657;
+      --surface: #0d1117;
+      --surface2: #161b22;
     }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    header {
-      background: var(--code-bg);
-      padding: 0 2rem;
-      height: 56px;
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--black);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* NOISE OVERLAY */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* TOPBAR */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8, 12, 16, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
-      border-bottom: 1px solid #333;
-    }
-    .logo { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 1rem; }
-    .logo-icon { background: var(--accent); width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
-    .header-badge { background: #28a745; color: #fff; font-size: 0.65rem; padding: 2px 8px; border-radius: 20px; font-family: 'JetBrains Mono', monospace; }
-
-    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-    .tagline { text-align: center; margin-bottom: 2.5rem; }
-    .tagline h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }
-    .tagline p { color: var(--muted); font-size: 0.95rem; }
-
-    .editor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .panel-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: #fff; }
-    .panel-title { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-    .panel-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .dot-blue { background: var(--accent); }
-    .dot-green { background: var(--green); }
-
-    .lang-select {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 6px; padding: 0.35rem 0.75rem;
-      font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
-      color: var(--text); cursor: pointer; outline: none;
+      padding: 0 2rem;
+      height: 52px;
     }
 
-    .code-editor {
-      width: 100%; min-height: 380px;
-      background: var(--code-bg); color: #d4d4d4;
-      border: none; outline: none; resize: vertical;
-      padding: 1rem; font-family: 'JetBrains Mono', monospace;
-      font-size: 0.82rem; line-height: 1.6; tab-size: 2;
-    }
-    .code-editor::placeholder { color: #555; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
 
-    .actions { padding: 0.75rem 1rem; background: #fff; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; }
-    .btn-review {
-      background: var(--accent); color: #fff; border: none; border-radius: 6px;
-      padding: 0.6rem 1.5rem; font-size: 0.85rem; font-weight: 600;
-      cursor: pointer; transition: background 0.2s;
+    .logo-mark {
+      width: 30px; height: 30px;
+      background: var(--accent2);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem; font-weight: 700;
+      color: #fff;
+      letter-spacing: -1px;
+    }
+
+    .logo-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+
+    .topbar-divider {
+      width: 1px; height: 20px;
+      background: var(--border);
+    }
+
+    .breadcrumb {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+    .status-dot {
       display: flex; align-items: center; gap: 6px;
+      font-size: 0.72rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--green);
     }
-    .btn-review:hover { background: #0256b0; }
-    .btn-review:disabled { background: #ccc; cursor: not-allowed; }
-    .btn-clear { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.82rem; cursor: pointer; }
-    .btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+    .status-dot::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
-    .result-area {
-      padding: 1rem; min-height: 380px;
-      font-size: 0.85rem; line-height: 1.8;
-      color: var(--text); white-space: pre-wrap;
-      font-family: 'Inter', sans-serif;
+    .model-chip {
+      background: var(--dark2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 0.68rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--purple);
+    }
+
+    /* LAYOUT */
+    .workspace {
+      display: grid;
+      grid-template-columns: 220px 1fr 1fr;
+      grid-template-rows: calc(100vh - 52px);
+      position: relative; z-index: 1;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      background: var(--dark);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
       overflow-y: auto;
     }
-    .result-placeholder { color: var(--muted); font-style: italic; }
-    .result-loading { color: var(--accent); display: flex; align-items: center; gap: 8px; }
 
-    .spinner { width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .sidebar-section {
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border2);
+    }
 
-    .examples { margin-top: 1.5rem; }
-    .examples-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    .examples-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .example-btn { background: var(--accent-light); border: 1px solid #c8e1ff; color: var(--accent); border-radius: 20px; padding: 0.3rem 0.9rem; font-size: 0.75rem; cursor: pointer; font-family: 'JetBrains Mono', monospace; }
-    .example-btn:hover { background: #c8e1ff; }
+    .sidebar-label {
+      font-size: 0.62rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0 1rem 0.6rem;
+    }
 
-    .stats-bar { display: flex; gap: 2rem; padding: 1rem 0; margin-top: 1.5rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
-    .stat-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
-    .stat-item strong { color: var(--text); }
+    .lang-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0.45rem 1rem;
+      cursor: pointer;
+      transition: background 0.1s;
+      font-size: 0.82rem;
+      color: var(--muted);
+      border-left: 2px solid transparent;
+    }
+    .lang-item:hover { background: var(--dark2); color: var(--text); }
+    .lang-item.active {
+      background: rgba(88, 166, 255, 0.08);
+      color: var(--accent);
+      border-left-color: var(--accent);
+    }
 
-    @media (max-width: 768px) { .editor-layout { grid-template-columns: 1fr; } }
+    .lang-icon {
+      width: 18px; height: 18px;
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .examples-section { padding: 1rem 0; }
+
+    .example-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0.35rem 1rem;
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: var(--muted);
+      transition: color 0.15s;
+    }
+    .example-item:hover { color: var(--text); }
+    .example-item::before {
+      content: '▸';
+      font-size: 0.6rem;
+      color: var(--muted2);
+    }
+
+    .sidebar-stats {
+      padding: 1rem;
+      margin-top: auto;
+      border-top: 1px solid var(--border2);
+    }
+
+    .stat-row {
+      display: flex; justify-content: space-between;
+      font-size: 0.72rem;
+      padding: 3px 0;
+    }
+    .stat-row span:first-child { color: var(--muted); }
+    .stat-row span:last-child { color: var(--text); font-family: 'Space Mono', monospace; }
+
+    /* EDITOR PANEL */
+    .editor-panel {
+      background: var(--dark);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+
+    .panel-tab-bar {
+      background: var(--dark2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: stretch;
+      height: 38px;
+    }
+
+    .panel-tab {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 1.2rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      position: relative;
+      font-family: 'Space Mono', monospace;
+      transition: color 0.15s;
+    }
+    .panel-tab.active {
+      background: var(--dark);
+      color: var(--text);
+    }
+    .panel-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    .tab-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    .editor-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border2);
+    }
+
+    .toolbar-left { display: flex; align-items: center; gap: 8px; }
+    .toolbar-right { display: flex; align-items: center; gap: 6px; }
+
+    .lang-badge {
+      background: var(--dark3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 0.7rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--orange);
+    }
+
+    .line-count {
+      font-size: 0.68rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+    }
+
+    .view-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 0.68rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .view-btn:hover { border-color: var(--muted); color: var(--text); }
+    .view-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.08); }
+
+    .code-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .code-input {
+      position: absolute; inset: 0;
+      background: var(--dark);
+      color: #c9d1d9;
+      border: none; outline: none; resize: none;
+      padding: 1rem 1rem 1rem 3.5rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      tab-size: 2;
+      width: 100%; height: 100%;
+    }
+    .code-input::placeholder { color: var(--muted2); }
+
+    .line-numbers {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3rem;
+      background: var(--dark);
+      border-right: 1px solid var(--border2);
+      padding: 1rem 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .line-num {
+      display: block;
+      text-align: right;
+      padding-right: 0.6rem;
+      font-size: 0.72rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+      line-height: 1.7;
+      height: calc(0.8rem * 1.7);
+    }
+
+    .code-preview {
+      display: none;
+      position: absolute; inset: 0;
+      overflow: auto;
+      margin: 0;
+      border-radius: 0;
+    }
+    .code-preview code {
+      font-family: 'Space Mono', monospace !important;
+      font-size: 0.8rem !important;
+      line-height: 1.7 !important;
+      padding: 1rem 1rem 1rem 3.5rem !important;
+      background: var(--dark) !important;
+      display: block;
+      min-height: 100%;
+    }
+
+    .editor-statusbar {
+      height: 26px;
+      background: var(--dark2);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1rem;
+      flex-shrink: 0;
+    }
+    .statusbar-item {
+      font-size: 0.65rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .editor-actions {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.75rem;
+      background: var(--dark2);
+      flex-shrink: 0;
+    }
+
+    .btn-run {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--accent2);
+      color: #fff;
+      border: none; border-radius: 6px;
+      padding: 0.55rem 1.4rem;
+      font-size: 0.82rem;
+      font-family: 'Space Mono', monospace;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-weight: 700;
+    }
+    .btn-run:hover { background: #388bfd; }
+    .btn-run:active { transform: scale(0.98); }
+    .btn-run:disabled { background: var(--dark3); color: var(--muted2); cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 0.55rem 1rem;
+      font-size: 0.78rem;
+      font-family: 'Space Mono', monospace;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+    /* RESULT PANEL */
+    .result-panel {
+      background: var(--dark);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .result-header {
+      background: var(--dark2);
+      border-bottom: 1px solid var(--border);
+      height: 38px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1rem;
+      flex-shrink: 0;
+    }
+
+    .result-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted);
+    }
+
+    .result-title.has-result { color: var(--green); }
+
+    .result-actions { display: flex; gap: 6px; }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 0.68rem;
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      transition: all 0.15s;
+      display: none;
+    }
+    .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-icon.visible { display: inline-block; }
+
+    .result-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    .result-placeholder {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .placeholder-icon {
+      width: 56px; height: 56px;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+      color: var(--muted2);
+    }
+
+    .placeholder-text {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .placeholder-hint {
+      font-size: 0.72rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted2);
+    }
+
+    /* SCORE BADGE */
+    .score-banner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      margin-bottom: 1.25rem;
+      font-size: 0.82rem;
+      font-family: 'Space Mono', monospace;
+      border: 1px solid;
+    }
+    .score-high { background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.3); color: var(--green); }
+    .score-mid { background: rgba(227,179,65,0.08); border-color: rgba(227,179,65,0.3); color: var(--yellow); }
+    .score-low { background: rgba(248,81,73,0.08); border-color: rgba(248,81,73,0.3); color: var(--red); }
+
+    /* ANALYSIS TEXT */
+    .analysis-body {
+      font-size: 0.87rem;
+      line-height: 1.85;
+      color: #c9d1d9;
+      white-space: pre-wrap;
+    }
+
+    /* LOADING */
+    .loading-state {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 1.5rem; padding: 3rem 0;
+    }
+
+    .loading-bars {
+      display: flex; align-items: flex-end; gap: 4px; height: 32px;
+    }
+    .bar {
+      width: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: barUp 1s ease-in-out infinite;
+    }
+    .bar:nth-child(1) { animation-delay: 0s; }
+    .bar:nth-child(2) { animation-delay: 0.15s; }
+    .bar:nth-child(3) { animation-delay: 0.3s; }
+    .bar:nth-child(4) { animation-delay: 0.45s; }
+    .bar:nth-child(5) { animation-delay: 0.6s; }
+
+    @keyframes barUp {
+      0%,100% { height: 8px; opacity: 0.4; }
+      50% { height: 28px; opacity: 1; }
+    }
+
+    .loading-text {
+      font-size: 0.78rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted);
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--dark3); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted2); }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .workspace { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
+      .sidebar { display: none; }
+    }
+    @media (max-width: 600px) {
+      .workspace { grid-template-columns: 1fr; }
+      .result-panel { min-height: 400px; }
+    }
   </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <div class="logo-icon">⚡</div>
-    AI Code Reviewer
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo-mark">AI</div>
+    <span class="logo-text">code-reviewer</span>
+    <div class="topbar-divider"></div>
+    <span class="breadcrumb">workspace / analyse</span>
   </div>
-  <span class="header-badge">● ONLINE</span>
+  <div class="topbar-right">
+    <div class="model-chip">llama3.2</div>
+    <div class="status-dot">ONLINE</div>
+  </div>
 </header>
 
-<div class="container">
-  <div class="tagline">
-    <h1>Analysez votre code avec l'IA</h1>
-    <p>Collez votre code, sélectionnez le langage et recevez une analyse détaillée instantanément.</p>
-  </div>
+<div class="workspace">
 
-  <div class="editor-layout">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <div class="panel-dot dot-blue"></div>
-          Votre code
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Langages</div>
+      <div class="lang-item active" onclick="setLang('python')">
+        <span class="lang-icon" style="background:#3572a5;color:#fff">py</span>
+        Python
+      </div>
+      <div class="lang-item" onclick="setLang('javascript')">
+        <span class="lang-icon" style="background:#f1e05a;color:#333">js</span>
+        JavaScript
+      </div>
+      <div class="lang-item" onclick="setLang('dockerfile')">
+        <span class="lang-icon" style="background:#384d54;color:#0db7ed">df</span>
+        Dockerfile
+      </div>
+      <div class="lang-item" onclick="setLang('yaml')">
+        <span class="lang-icon" style="background:#cb171e;color:#fff">yml</span>
+        CI/CD YAML
+      </div>
+      <div class="lang-item" onclick="setLang('bash')">
+        <span class="lang-icon" style="background:#89e051;color:#333">sh</span>
+        Bash
+      </div>
+      <div class="lang-item" onclick="setLang('java')">
+        <span class="lang-icon" style="background:#b07219;color:#fff">jv</span>
+        Java
+      </div>
+      <div class="lang-item" onclick="setLang('go')">
+        <span class="lang-icon" style="background:#00add8;color:#fff">go</span>
+        Go
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Exemples</div>
+      <div class="example-item" onclick="loadExample('python')">Python — injection SQL</div>
+      <div class="example-item" onclick="loadExample('dockerfile')">Dockerfile — best practices</div>
+      <div class="example-item" onclick="loadExample('javascript')">JS — eval & XHR</div>
+      <div class="example-item" onclick="loadExample('yaml')">YAML — secret exposé</div>
+      <div class="example-item" onclick="loadExample('bash')">Bash — rm -rf danger</div>
+    </div>
+
+    <div class="sidebar-stats">
+      <div class="sidebar-label" style="padding:0 0 0.6rem">Session</div>
+      <div class="stat-row">
+        <span>Analyses</span>
+        <span id="stat-count">0</span>
+      </div>
+      <div class="stat-row">
+        <span>Modèle</span>
+        <span>llama3.2</span>
+      </div>
+      <div class="stat-row">
+        <span>Confidentialité</span>
+        <span style="color:var(--green)">locale</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- EDITOR -->
+  <section class="editor-panel">
+    <div class="panel-tab-bar">
+      <div class="panel-tab active">
+        <span class="tab-dot" style="background:var(--orange)"></span>
+        <span id="tab-filename">main.py</span>
+      </div>
+    </div>
+
+    <div class="editor-toolbar">
+      <div class="toolbar-left">
+        <span class="lang-badge" id="lang-badge">Python</span>
+        <span class="line-count" id="line-count">0 lignes</span>
+      </div>
+      <div class="toolbar-right">
+        <button class="view-btn active" id="btn-edit" onclick="switchView('edit')">ÉDITER</button>
+        <button class="view-btn" id="btn-preview" onclick="switchView('preview')">APERÇU</button>
+      </div>
+    </div>
+
+    <div class="code-area">
+      <div class="line-numbers" id="line-numbers">
+        <span class="line-num">1</span>
+      </div>
+      <textarea class="code-input" id="code-input"
+        placeholder="# Collez votre code ici..."
+        oninput="updateLineNumbers(); updateLangBadge();"
+        onkeydown="handleTab(event)"></textarea>
+      <pre class="code-preview hljs" id="code-preview"><code id="code-preview-inner"></code></pre>
+    </div>
+
+    <div class="editor-statusbar">
+      <div class="statusbar-item">
+        <span id="status-lang">Python</span>
+        <span>·</span>
+        <span>UTF-8</span>
+      </div>
+      <div class="statusbar-item">
+        <span id="cursor-pos">Ln 1, Col 1</span>
+      </div>
+    </div>
+
+    <div class="editor-actions">
+      <button class="btn-run" id="review-btn" onclick="reviewCode()">
+        ▶ ANALYSER
+      </button>
+      <button class="btn-secondary" onclick="clearAll()">Effacer</button>
+    </div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="result-panel">
+    <div class="result-header">
+      <div class="result-title" id="result-title">
+        <span>◎ RÉSULTAT</span>
+      </div>
+      <div class="result-actions">
+        <button class="btn-icon" id="btn-copy" onclick="copyResult()">COPIER</button>
+        <button class="btn-icon" id="btn-export" onclick="exportPDF()">PDF ↓</button>
+      </div>
+    </div>
+
+    <div class="result-content" id="result-content">
+      <div class="result-placeholder" id="placeholder">
+        <div class="placeholder-icon">⚡</div>
+        <div class="placeholder-text">
+          L'analyse IA apparaîtra ici.<br>
+          Collez du code et cliquez sur <strong>ANALYSER</strong>.
         </div>
-        <select class="lang-select" id="language">
-          <option value="python">Python</option>
-          <option value="javascript">JavaScript</option>
-          <option value="dockerfile">Dockerfile</option>
-          <option value="yaml">CI/CD YAML</option>
-          <option value="bash">Bash</option>
-          <option value="java">Java</option>
-          <option value="go">Go</option>
-        </select>
-      </div>
-      <textarea class="code-editor" id="code-input"
-        placeholder="# Collez votre code ici..."></textarea>
-      <div class="actions">
-        <button class="btn-review" id="review-btn" onclick="reviewCode()">
-          ⚡ Analyser avec l'IA
-        </button>
-        <button class="btn-clear" onclick="clearAll()">Effacer</button>
+        <div class="placeholder-hint">Powered by Ollama · llama3.2 · 100% local</div>
       </div>
     </div>
+  </section>
 
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <div class="panel-dot dot-green"></div>
-          Analyse IA
-        </div>
-        <span style="font-size:0.72rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">llama3.2</span>
-      </div>
-      <div class="result-area" id="result">
-        <span class="result-placeholder">L'analyse apparaîtra ici...<br><br>Collez du code à gauche et cliquez sur "Analyser avec l'IA".</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="examples">
-    <div class="examples-title">Exemples rapides</div>
-    <div class="examples-list">
-      <button class="example-btn" onclick="loadExample('python')">Python — bug</button>
-      <button class="example-btn" onclick="loadExample('dockerfile')">Dockerfile</button>
-      <button class="example-btn" onclick="loadExample('javascript')">JavaScript</button>
-      <button class="example-btn" onclick="loadExample('yaml')">CI/CD YAML</button>
-      <button class="example-btn" onclick="loadExample('bash')">Bash script</button>
-    </div>
-  </div>
-
-  <div class="stats-bar">
-    <div class="stat-item">🤖 Modèle : <strong>Llama 3.2 (Ollama)</strong></div>
-    <div class="stat-item">🌍 Langages : <strong>7 supportés</strong></div>
-    <div class="stat-item">⚡ Analyse : <strong>locale & privée</strong></div>
-    <div class="stat-item">🔒 Données : <strong>ne quittent pas votre serveur</strong></div>
-  </div>
 </div>
 
 <script>
 const EXAMPLES = {
-  python: {
-    lang: 'python',
-    code: `import pickle\n\ndef load_data(filename):\n    with open(filename, 'rb') as f:\n        data = pickle.load(f)\n    return data\n\ndef get_user(user_id):\n    query = "SELECT * FROM users WHERE id = " + user_id\n    return db.execute(query)\n\npassword = "admin123"\napi_key = "sk-1234567890abcdef"`
-  },
-  dockerfile: {
-    lang: 'dockerfile',
-    code: `FROM ubuntu:latest\nRUN apt-get update\nRUN apt-get install -y python3\nRUN apt-get install -y pip\nCOPY . /app\nRUN pip install -r /app/requirements.txt\nCMD python3 /app/main.py`
-  },
-  javascript: {
-    lang: 'javascript',
-    code: `var data = []\nfor(var i=0;i<1000;i++){\n  data.push(i)\n}\n\nfunction getUser(id) {\n  var xhr = new XMLHttpRequest()\n  xhr.open('GET', '/api/user/'+id, false)\n  xhr.send()\n  eval(xhr.responseText)\n  return xhr.response\n}`
-  },
-  yaml: {
-    lang: 'yaml',
-    code: `name: Deploy\non: push\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v2\n      - run: npm install\n      - run: docker build -t myapp .\n      - run: docker push myapp\n        env:\n          PASSWORD: mypassword123`
-  },
-  bash: {
-    lang: 'bash',
-    code: `#!/bin/bash\nUSER_INPUT=$1\nrm -rf $USER_INPUT\ncd /tmp && wget http://example.com/script.sh\nchmod 777 script.sh\n./script.sh`
-  }
+  python: { lang: 'python', file: 'main.py', code: `import pickle\nimport os\n\ndef load_data(filename):\n    with open(filename, 'rb') as f:\n        data = pickle.load(f)\n    return data\n\ndef get_user(user_id):\n    query = "SELECT * FROM users WHERE id = " + user_id\n    return db.execute(query)\n\npassword = "admin123"\napi_key = "sk-1234567890abcdef"\n\ndef run_command(cmd):\n    os.system(cmd)` },
+  dockerfile: { lang: 'dockerfile', file: 'Dockerfile', code: `FROM ubuntu:latest\nRUN apt-get update\nRUN apt-get install -y python3\nRUN apt-get install -y pip\nCOPY . /app\nRUN pip install -r /app/requirements.txt\nENV SECRET_KEY=mysecretkey123\nCMD python3 /app/main.py` },
+  javascript: { lang: 'javascript', file: 'app.js', code: `var data = []\nfor(var i=0;i<1000;i++){\n  data.push(i)\n}\n\nfunction getUser(id) {\n  var xhr = new XMLHttpRequest()\n  xhr.open('GET', '/api/user/'+id, false)\n  xhr.send()\n  eval(xhr.responseText)\n  return xhr.response\n}\n\ndocument.innerHTML = userInput` },
+  yaml: { lang: 'yaml', file: 'ci-cd.yml', code: `name: Deploy\non: push\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v2\n      - run: docker build -t myapp .\n      - run: docker push myapp\n        env:\n          DB_PASSWORD: mypassword123\n          SECRET_KEY: hardcoded_secret` },
+  bash: { lang: 'bash', file: 'deploy.sh', code: `#!/bin/bash\nUSER_INPUT=$1\nrm -rf $USER_INPUT\ncd /tmp && wget http://example.com/script.sh\nchmod 777 script.sh\n./script.sh\ncurl http://api.example.com/data | sh` }
 };
+
+const LANG_NAMES = { python: 'Python', javascript: 'JavaScript', dockerfile: 'Dockerfile', yaml: 'YAML', bash: 'Bash', java: 'Java', go: 'Go' };
+const LANG_FILES = { python: 'main.py', javascript: 'app.js', dockerfile: 'Dockerfile', yaml: 'pipeline.yml', bash: 'script.sh', java: 'Main.java', go: 'main.go' };
+
+let currentLang = 'python';
+let lastAnalysis = null;
+let analyseCount = 0;
+
+function setLang(lang) {
+  currentLang = lang;
+  document.querySelectorAll('.lang-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('tab-filename').textContent = LANG_FILES[lang];
+  document.getElementById('lang-badge').textContent = LANG_NAMES[lang];
+  document.getElementById('status-lang').textContent = LANG_NAMES[lang];
+}
 
 function loadExample(lang) {
   const ex = EXAMPLES[lang];
+  currentLang = ex.lang;
   document.getElementById('code-input').value = ex.code;
-  document.getElementById('language').value = ex.lang;
+  document.getElementById('tab-filename').textContent = ex.file;
+  document.getElementById('lang-badge').textContent = LANG_NAMES[lang];
+  document.getElementById('status-lang').textContent = LANG_NAMES[lang];
+  document.querySelectorAll('.lang-item').forEach((el, i) => {
+    el.classList.toggle('active', ['python','javascript','dockerfile','yaml','bash','java','go'][i] === lang);
+  });
+  updateLineNumbers();
+  switchView('edit');
 }
 
-async function reviewCode() {
-  const code = document.getElementById('code-input').value.trim();
-  const language = document.getElementById('language').value;
-  const btn = document.getElementById('review-btn');
-  const result = document.getElementById('result');
+function updateLineNumbers() {
+  const textarea = document.getElementById('code-input');
+  const lines = textarea.value.split('\n');
+  document.getElementById('line-count').textContent = `${lines.length} ligne${lines.length > 1 ? 's' : ''}`;
+  const container = document.getElementById('line-numbers');
+  container.innerHTML = lines.map((_, i) => `<span class="line-num">${i + 1}</span>`).join('');
+}
 
-  if (!code) {
-    result.innerHTML = '<span style="color:var(--red)">⚠️ Veuillez coller du code.</span>';
-    return;
+function switchView(mode) {
+  const editor = document.getElementById('code-input');
+  const preview = document.getElementById('code-preview');
+  const btnEdit = document.getElementById('btn-edit');
+  const btnPrev = document.getElementById('btn-preview');
+
+  if (mode === 'preview') {
+    const inner = document.getElementById('code-preview-inner');
+    const langMap = { yaml: 'yaml', dockerfile: 'dockerfile', bash: 'bash', javascript: 'javascript', python: 'python', java: 'java', go: 'go' };
+    inner.className = `language-${langMap[currentLang] || 'plaintext'}`;
+    inner.textContent = editor.value;
+    hljs.highlightElement(inner);
+    editor.style.display = 'none';
+    document.getElementById('line-numbers').style.display = 'none';
+    preview.style.display = 'block';
+    btnEdit.classList.remove('active');
+    btnPrev.classList.add('active');
+  } else {
+    editor.style.display = 'block';
+    document.getElementById('line-numbers').style.display = 'block';
+    preview.style.display = 'none';
+    btnEdit.classList.add('active');
+    btnPrev.classList.remove('active');
   }
-
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Analyse en cours...';
-  result.innerHTML = '<div class="result-loading"><div class="spinner"></div> L\'IA analyse votre code...</div>';
-
-  try {
-    const res = await fetch('/api/review', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, language })
-    });
-    const data = await res.json();
-    result.textContent = data.analysis || 'Erreur lors de l\'analyse.';
-  } catch(e) {
-    result.innerHTML = '<span style="color:var(--red)">⚠️ Service IA non disponible.</span>';
-  }
-
-  btn.disabled = false;
-  btn.innerHTML = '⚡ Analyser avec l\'IA';
 }
 
-function clearAll() {
-  document.getElementById('code-input').value = '';
-  document.getElementById('result').innerHTML = '<span class="result-placeholder">L\'analyse apparaîtra ici...</span>';
-}
-
-document.getElementById('code-input').addEventListener('keydown', e => {
+function handleTab(e) {
   if (e.key === 'Tab') {
     e.preventDefault();
     const s = e.target.selectionStart;
     e.target.value = e.target.value.substring(0, s) + '  ' + e.target.value.substring(e.target.selectionEnd);
     e.target.selectionStart = e.target.selectionEnd = s + 2;
+    updateLineNumbers();
   }
-});
+}
+
+function updateLangBadge() {
+  const ta = document.getElementById('code-input');
+  const lines = ta.value.split('\n');
+  const pos = ta.selectionStart;
+  const line = ta.value.substring(0, pos).split('\n').length;
+  const col = pos - ta.value.lastIndexOf('\n', pos - 1);
+  document.getElementById('cursor-pos').textContent = `Ln ${line}, Col ${col}`;
+}
+
+async function reviewCode() {
+  const code = document.getElementById('code-input').value.trim();
+  const btn = document.getElementById('review-btn');
+  const content = document.getElementById('result-content');
+  const title = document.getElementById('result-title');
+
+  if (!code) {
+    content.innerHTML = '<div style="padding:2rem;color:var(--red);font-family:Space Mono,monospace;font-size:0.8rem;">⚠ Aucun code à analyser.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ ANALYSE...';
+  document.getElementById('btn-copy').classList.remove('visible');
+  document.getElementById('btn-export').classList.remove('visible');
+
+  content.innerHTML = `
+    <div class="loading-state">
+      <div class="loading-bars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div>
+      </div>
+      <div class="loading-text">Analyse par llama3.2 en cours...</div>
+    </div>`;
+
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, language: currentLang })
+    });
+    const data = await res.json();
+
+    if (data.analysis) {
+      lastAnalysis = data.analysis;
+      analyseCount++;
+      document.getElementById('stat-count').textContent = analyseCount;
+
+      const score = getScore(data.analysis);
+      content.innerHTML = '';
+
+      const banner = document.createElement('div');
+      banner.className = `score-banner ${score.cls}`;
+      banner.textContent = score.label;
+      content.appendChild(banner);
+
+      const body = document.createElement('div');
+      body.className = 'analysis-body';
+      body.textContent = data.analysis;
+      content.appendChild(body);
+
+      title.innerHTML = '<span style="color:var(--green)">◉ ANALYSE TERMINÉE</span>';
+      document.getElementById('btn-copy').classList.add('visible');
+      document.getElementById('btn-export').classList.add('visible');
+    } else {
+      throw new Error('empty');
+    }
+  } catch(e) {
+    content.innerHTML = '<div style="padding:2rem;color:var(--red);font-family:Space Mono,monospace;font-size:0.8rem;">⚠ Service IA non disponible.<br><br>Vérifiez qu\'Ollama tourne sur le serveur.</div>';
+    title.innerHTML = '<span style="color:var(--red)">◉ ERREUR</span>';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '▶ ANALYSER';
+}
+
+function getScore(text) {
+  const t = text.toLowerCase();
+  const n = (t.match(/problème|bug|erreur|vulnérabilité|danger|critique|unsafe|security|injection|hardcoded/g) || []).length;
+  if (n === 0) return { label: '✓ Aucun problème critique détecté', cls: 'score-high' };
+  if (n <= 2) return { label: `⚠ ${n} problème(s) détecté(s)`, cls: 'score-mid' };
+  return { label: `✕ ${n} problèmes critiques détectés`, cls: 'score-low' };
+}
+
+function copyResult() {
+  if (!lastAnalysis) return;
+  navigator.clipboard.writeText(lastAnalysis).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = 'COPIÉ !';
+    setTimeout(() => btn.textContent = 'COPIER', 1500);
+  });
+}
+
+async function exportPDF() {
+  if (!lastAnalysis) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFillColor(13, 17, 23);
+  doc.rect(0, 0, 210, 297, 'F');
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(88, 166, 255);
+  doc.text('AI CODE REVIEWER', 15, 20);
+
+  doc.setFontSize(8);
+  doc.setTextColor(125, 133, 144);
+  doc.setFont('courier', 'normal');
+  doc.text(`LANGAGE: ${LANG_NAMES[currentLang].toUpperCase()}   DATE: ${new Date().toLocaleDateString('fr-FR')}   MODEL: llama3.2`, 15, 28);
+
+  doc.setDrawColor(48, 54, 61);
+  doc.line(15, 32, 195, 32);
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(230, 160, 87);
+  doc.text('CODE ANALYSÉ:', 15, 40);
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(201, 209, 217);
+  const codeLines = doc.splitTextToSize(document.getElementById('code-input').value.substring(0, 600), 175);
+  let y = 46;
+  codeLines.forEach(l => {
+    if (y > 130) return;
+    doc.text(l, 15, y);
+    y += 4;
+  });
+
+  doc.setDrawColor(48, 54, 61);
+  doc.line(15, y + 4, 195, y + 4);
+  y += 12;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(63, 185, 80);
+  doc.text('ANALYSE IA:', 15, y);
+  y += 8;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(201, 209, 217);
+  const aLines = doc.splitTextToSize(lastAnalysis, 175);
+  aLines.forEach(l => {
+    if (y > 285) { doc.addPage(); doc.setFillColor(13,17,23); doc.rect(0,0,210,297,'F'); y = 15; }
+    doc.text(l, 15, y);
+    y += 4.5;
+  });
+
+  doc.save(`ai-review-${currentLang}-${Date.now()}.pdf`);
+}
+
+function clearAll() {
+  document.getElementById('code-input').value = '';
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-placeholder" id="placeholder">
+      <div class="placeholder-icon">⚡</div>
+      <div class="placeholder-text">L'analyse IA apparaîtra ici.<br>Collez du code et cliquez sur <strong>ANALYSER</strong>.</div>
+      <div class="placeholder-hint">Powered by Ollama · llama3.2 · 100% local</div>
+    </div>`;
+  document.getElementById('result-title').innerHTML = '<span>◎ RÉSULTAT</span>';
+  document.getElementById('btn-copy').classList.remove('visible');
+  document.getElementById('btn-export').classList.remove('visible');
+  lastAnalysis = null;
+  updateLineNumbers();
+  switchView('edit');
+}
+
+updateLineNumbers();
 </script>
 </body>
 </html>
