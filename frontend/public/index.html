@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Code Reviewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #f8f9fa;
+      --border: #e1e4e8;
+      --text: #24292e;
+      --muted: #6a737d;
+      --accent: #0366d6;
+      --accent-light: #f1f8ff;
+      --green: #28a745;
+      --red: #d73a49;
+      --code-bg: #1e1e1e;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--code-bg);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #333;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 1rem; }
+    .logo-icon { background: var(--accent); width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
+    .header-badge { background: #28a745; color: #fff; font-size: 0.65rem; padding: 2px 8px; border-radius: 20px; font-family: 'JetBrains Mono', monospace; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .tagline { text-align: center; margin-bottom: 2.5rem; }
+    .tagline h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .tagline p { color: var(--muted); font-size: 0.95rem; }
+
+    .editor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .panel-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: #fff; }
+    .panel-title { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .panel-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-blue { background: var(--accent); }
+    .dot-green { background: var(--green); }
+
+    .lang-select {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.35rem 0.75rem;
+      font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+      color: var(--text); cursor: pointer; outline: none;
+    }
+
+    .code-editor {
+      width: 100%; min-height: 380px;
+      background: var(--code-bg); color: #d4d4d4;
+      border: none; outline: none; resize: vertical;
+      padding: 1rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem; line-height: 1.6; tab-size: 2;
+    }
+    .code-editor::placeholder { color: #555; }
+
+    .actions { padding: 0.75rem 1rem; background: #fff; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; }
+    .btn-review {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 0.6rem 1.5rem; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-review:hover { background: #0256b0; }
+    .btn-review:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-clear { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.82rem; cursor: pointer; }
+    .btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+    .result-area {
+      padding: 1rem; min-height: 380px;
+      font-size: 0.85rem; line-height: 1.8;
+      color: var(--text); white-space: pre-wrap;
+      font-family: 'Inter', sans-serif;
+      overflow-y: auto;
+    }
+    .result-placeholder { color: var(--muted); font-style: italic; }
+    .result-loading { color: var(--accent); display: flex; align-items: center; gap: 8px; }
+
+    .spinner { width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .examples { margin-top: 1.5rem; }
+    .examples-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .examples-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .example-btn { background: var(--accent-light); border: 1px solid #c8e1ff; color: var(--accent); border-radius: 20px; padding: 0.3rem 0.9rem; font-size: 0.75rem; cursor: pointer; font-family: 'JetBrains Mono', monospace; }
+    .example-btn:hover { background: #c8e1ff; }
+
+    .stats-bar { display: flex; gap: 2rem; padding: 1rem 0; margin-top: 1.5rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .stat-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+    .stat-item strong { color: var(--text); }
+
+    @media (max-width: 768px) { .editor-layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    AI Code Reviewer
+  </div>
+  <span class="header-badge">● ONLINE</span>
+</header>
+
+<div class="container">
+  <div class="tagline">
+    <h1>Analysez votre code avec l'IA</h1>
+    <p>Collez votre code, sélectionnez le langage et recevez une analyse détaillée instantanément.</p>
+  </div>
+
+  <div class="editor-layout">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <div class="panel-dot dot-blue"></div>
+          Votre code
+        </div>
+        <select class="lang-select" id="language">
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="dockerfile">Dockerfile</option>
+          <option value="yaml">CI/CD YAML</option>
+          <option value="bash">Bash</option>
+          <option value="java">Java</option>
+          <option value="go">Go</option>
+        </select>
+      </div>
+      <textarea class="code-editor" id="code-input"
+        placeholder="# Collez votre code ici..."></textarea>
+      <div class="actions">
+        <button class="btn-review" id="review-btn" onclick="reviewCode()">
+          ⚡ Analyser avec l'IA
+        </button>
+        <button class="btn-clear" onclick="clearAll()">Effacer</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <div class="panel-dot dot-green"></div>
+          Analyse IA
+        </div>
+        <span style="font-size:0.72rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">llama3.2</span>
+      </div>
+      <div class="result-area" id="result">
+        <span class="result-placeholder">L'analyse apparaîtra ici...<br><br>Collez du code à gauche et cliquez sur "Analyser avec l'IA".</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="examples">
+    <div class="examples-title">Exemples rapides</div>
+    <div class="examples-list">
+      <button class="example-btn" onclick="loadExample('python')">Python — bug</button>
+      <button class="example-btn" onclick="loadExample('dockerfile')">Dockerfile</button>
+      <button class="example-btn" onclick="loadExample('javascript')">JavaScript</button>
+      <button class="example-btn" onclick="loadExample('yaml')">CI/CD YAML</button>
+      <button class="example-btn" onclick="loadExample('bash')">Bash script</button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">🤖 Modèle : <strong>Llama 3.2 (Ollama)</strong></div>
+    <div class="stat-item">🌍 Langages : <strong>7 supportés</strong></div>
+    <div class="stat-item">⚡ Analyse : <strong>locale & privée</strong></div>
+    <div class="stat-item">🔒 Données : <strong>ne quittent pas votre serveur</strong></div>
+  </div>
+</div>
+
+<script>
+const EXAMPLES = {
+  python: {
+    lang: 'python',
+    code: `import pickle\n\ndef load_data(filename):\n    with open(filename, 'rb') as f:\n        data = pickle.load(f)\n    return data\n\ndef get_user(user_id):\n    query = "SELECT * FROM users WHERE id = " + user_id\n    return db.execute(query)\n\npassword = "admin123"\napi_key = "sk-1234567890abcdef"`
+  },
+  dockerfile: {
+    lang: 'dockerfile',
+    code: `FROM ubuntu:latest\nRUN apt-get update\nRUN apt-get install -y python3\nRUN apt-get install -y pip\nCOPY . /app\nRUN pip install -r /app/requirements.txt\nCMD python3 /app/main.py`
+  },
+  javascript: {
+    lang: 'javascript',
+    code: `var data = []\nfor(var i=0;i<1000;i++){\n  data.push(i)\n}\n\nfunction getUser(id) {\n  var xhr = new XMLHttpRequest()\n  xhr.open('GET', '/api/user/'+id, false)\n  xhr.send()\n  eval(xhr.responseText)\n  return xhr.response\n}`
+  },
+  yaml: {
+    lang: 'yaml',
+    code: `name: Deploy\non: push\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v2\n      - run: npm install\n      - run: docker build -t myapp .\n      - run: docker push myapp\n        env:\n          PASSWORD: mypassword123`
+  },
+  bash: {
+    lang: 'bash',
+    code: `#!/bin/bash\nUSER_INPUT=$1\nrm -rf $USER_INPUT\ncd /tmp && wget http://example.com/script.sh\nchmod 777 script.sh\n./script.sh`
+  }
+};
+
+function loadExample(lang) {
+  const ex = EXAMPLES[lang];
+  document.getElementById('code-input').value = ex.code;
+  document.getElementById('language').value = ex.lang;
+}
+
+async function reviewCode() {
+  const code = document.getElementById('code-input').value.trim();
+  const language = document.getElementById('language').value;
+  const btn = document.getElementById('review-btn');
+  const result = document.getElementById('result');
+
+  if (!code) {
+    result.innerHTML = '<span style="color:var(--red)">⚠️ Veuillez coller du code.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Analyse en cours...';
+  result.innerHTML = '<div class="result-loading"><div class="spinner"></div> L\'IA analyse votre code...</div>';
+
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, language })
+    });
+    const data = await res.json();
+    result.textContent = data.analysis || 'Erreur lors de l\'analyse.';
+  } catch(e) {
+    result.innerHTML = '<span style="color:var(--red)">⚠️ Service IA non disponible.</span>';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Analyser avec l\'IA';
+}
+
+function clearAll() {
+  document.getElementById('code-input').value = '';
+  document.getElementById('result').innerHTML = '<span class="result-placeholder">L\'analyse apparaîtra ici...</span>';
+}
+
+document.getElementById('code-input').addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = e.target.selectionStart;
+    e.target.value = e.target.value.substring(0, s) + '  ' + e.target.value.substring(e.target.selectionEnd);
+    e.target.selectionStart = e.target.selectionEnd = s + 2;
+  }
+});
+</script>
+</body>
+</html>
