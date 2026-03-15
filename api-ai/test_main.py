@@ -32,3 +32,17 @@ def test_review_structure():
     assert "language" in data
     assert "analysis" in data
     assert "timestamp" in data
+def test_models():
+    response = client.get("/models")
+    assert response.status_code == 200
+    assert "models" in response.json()
+
+
+def test_review_with_model():
+    response = client.post("/review", json={
+        "code": "print('hello')",
+        "language": "python",
+        "model": "llama3.2"
+    })
+    assert response.status_code == 200
+    assert response.json()["model"] == "llama3.2"
