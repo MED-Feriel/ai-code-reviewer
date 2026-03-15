@@ -1,37 +1,48 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import httpx
 import os
 import time
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reviews.db")
 
-AVAILABLE_MODELS = {
-    "llama3.2": {
-        "name": "llama3.2",
-        "label": "Llama 3.2",
-        "description": "Modèle généraliste rapide",
-        "specialty": "general"
-    },
-    "codellama": {
-        "name": "codellama",
-        "label": "Code Llama",
-        "description": "Spécialisé pour le code",
-        "specialty": "code"
-    },
-    "deepseek-coder": {
-        "name": "deepseek-coder",
-        "label": "DeepSeek Coder",
-        "description": "Expert en analyse de code",
-        "specialty": "code"
-    },
-}
+# ── Database ──────────────────────────────────────────
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
+
+class ReviewRecord(Base):
+    __tablename__ = "reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(50))
+    code = Column(Text)
+    analysis = Column(Text)
+    model = Column(String(100))
+    duration_seconds = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ── FastAPI ───────────────────────────────────────────
 app = FastAPI(
     title="AI Code Reviewer API",
-    description="Analyse automatique de code avec Ollama — Multi-modèles",
+    description="Analyse automatique de code avec Ollama + PostgreSQL",
     version="2.0.0"
 )
 
@@ -42,6 +53,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+AVAILABLE_MODELS = {
+    "llama3.2": {"name": "llama3.2", "label": "Llama 3.2", "specialty": "general"},
+    "codellama": {"name": "codellama", "label": "Code Llama", "specialty": "code"},
+    "deepseek-coder": {"name": "deepseek-coder", "label": "DeepSeek Coder", "specialty": "code"},
+}
+
 
 class ReviewRequest(BaseModel):
     code: str
@@ -50,6 +67,7 @@ class ReviewRequest(BaseModel):
 
 
 class ReviewResponse(BaseModel):
+    id: int
     language: str
     analysis: str
     timestamp: str
@@ -80,9 +98,8 @@ def get_models():
 
 
 @app.post("/review", response_model=ReviewResponse)
-async def review_code(request: ReviewRequest):
+async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
     start_time = time.time()
-
     model = request.model if request.model in AVAILABLE_MODELS else "llama3.2"
 
     prompt = (
@@ -108,10 +125,49 @@ async def review_code(request: ReviewRequest):
 
     duration = round(time.time() - start_time, 2)
 
-    return ReviewResponse(
+    record = ReviewRecord(
         language=request.language,
+        code=request.code,
         analysis=analysis,
-        timestamp=datetime.utcnow().isoformat(),
         model=model,
         duration_seconds=duration
     )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return ReviewResponse(
+        id=record.id,
+        language=record.language,
+        analysis=analysis,
+        timestamp=record.created_at.isoformat(),
+        model=model,
+        duration_seconds=duration
+    )
+
+
+@app.get("/history")
+def get_history(limit: int = 10, db: Session = Depends(get_db)):
+    records = db.query(ReviewRecord).order_by(
+        ReviewRecord.created_at.desc()
+    ).limit(limit).all()
+    return [
+        {
+            "id": r.id,
+            "language": r.language,
+            "model": r.model,
+            "duration_seconds": r.duration_seconds,
+            "created_at": r.created_at.isoformat()
+        }
+        for r in records
+    ]
+
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(ReviewRecord).count()
+    return {
+        "total_reviews": total,
+        "service": "ai-code-reviewer",
+        "version": "2.0.0"
+    }
