@@ -8,6 +8,7 @@ import httpx
 import mlflow
 import os
 import time
+from prometheus_fastapi_instrumentator import Instrumentator
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reviews.db")
@@ -42,8 +43,11 @@ def get_db():
 
 
 # ── MLflow ────────────────────────────────────────────
-mlflow.set_tracking_uri(MLFLOW_URI)
-mlflow.set_experiment("ai-code-reviewer")
+try:
+    mlflow.set_tracking_uri(MLFLOW_URI)
+    mlflow.set_experiment("ai-code-reviewer")
+except Exception:
+    pass
 
 # ── FastAPI ───────────────────────────────────────────
 app = FastAPI(
@@ -51,6 +55,8 @@ app = FastAPI(
     description="Analyse automatique de code avec Ollama + PostgreSQL + MLflow",
     version="3.0.0"
 )
+
+Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,
