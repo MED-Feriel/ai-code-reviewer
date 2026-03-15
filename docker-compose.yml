@@ -4,6 +4,7 @@ networks:
 
 volumes:
   postgres-data:
+  mlflow-data:
 
 services:
 
@@ -27,6 +28,23 @@ services:
       timeout: 5s
       retries: 5
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.1
+    container_name: mlflow
+    networks:
+      - reviewer-net
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    restart: unless-stopped
+
   api-ai:
     build:
       context: ./api-ai
@@ -37,6 +55,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://reviewer:reviewer123@postgres:5432/code_reviewer
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
       - OLLAMA_URL=http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"

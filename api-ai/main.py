@@ -5,11 +5,13 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import httpx
+import mlflow
 import os
 import time
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reviews.db")
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 # ── Database ──────────────────────────────────────────
 engine = create_engine(DATABASE_URL)
@@ -39,11 +41,15 @@ def get_db():
         db.close()
 
 
+# ── MLflow ────────────────────────────────────────────
+mlflow.set_tracking_uri(MLFLOW_URI)
+mlflow.set_experiment("ai-code-reviewer")
+
 # ── FastAPI ───────────────────────────────────────────
 app = FastAPI(
     title="AI Code Reviewer API",
-    description="Analyse automatique de code avec Ollama + PostgreSQL",
-    version="2.0.0"
+    description="Analyse automatique de code avec Ollama + PostgreSQL + MLflow",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -77,7 +83,7 @@ class ReviewResponse(BaseModel):
 
 @app.get("/")
 def root():
-    return {"service": "ai-code-reviewer", "version": "2.0.0", "status": "running"}
+    return {"service": "ai-code-reviewer", "version": "3.0.0", "status": "running"}
 
 
 @app.get("/health")
@@ -125,6 +131,7 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
 
     duration = round(time.time() - start_time, 2)
 
+    # ── Sauvegarder en PostgreSQL ──
     record = ReviewRecord(
         language=request.language,
         code=request.code,
@@ -135,6 +142,18 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    # ── MLflow tracking ──
+    try:
+        with mlflow.start_run():
+            mlflow.log_param("language", request.language)
+            mlflow.log_param("model", model)
+            mlflow.log_param("code_length", len(request.code))
+            mlflow.log_metric("duration_seconds", duration)
+            mlflow.log_metric("analysis_length", len(analysis))
+            mlflow.log_metric("review_id", record.id)
+    except Exception:
+        pass
 
     return ReviewResponse(
         id=record.id,
@@ -169,5 +188,5 @@ def get_stats(db: Session = Depends(get_db)):
     return {
         "total_reviews": total,
         "service": "ai-code-reviewer",
-        "version": "2.0.0"
+        "version": "3.0.0"
     }
