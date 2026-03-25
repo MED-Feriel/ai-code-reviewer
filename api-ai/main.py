@@ -4,11 +4,45 @@ from pydantic import BaseModel
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram, Gauge
 import httpx
 import mlflow
 import os
 import time
 
+# ── Métriques custom Prometheus ───────────────────────
+REVIEWS_TOTAL = Counter(
+    'code_reviews_total',
+    'Nombre total d analyses de code',
+    ['language', 'model']
+)
+
+REVIEW_DURATION = Histogram(
+    'code_review_duration_seconds',
+    'Duree des analyses de code en secondes',
+    ['model'],
+    buckets=[5, 10, 20, 30, 60, 90, 120]
+)
+
+REVIEWS_IN_PROGRESS = Gauge(
+    'code_reviews_in_progress',
+    'Nombre d analyses en cours'
+)
+
+OLLAMA_ERRORS = Counter(
+    'ollama_errors_total',
+    'Nombre d erreurs Ollama',
+    ['model']
+)
+
+CODE_SIZE = Histogram(
+    'code_input_size_chars',
+    'Taille du code soumis en caracteres',
+    buckets=[50, 100, 500, 1000, 2000, 5000]
+)
+
+# ── Config ────────────────────────────────────────────
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reviews.db")
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
@@ -62,6 +96,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+Instrumentator().instrument(app).expose(app)
+
+# ── Models ────────────────────────────────────────────
 AVAILABLE_MODELS = {
     "llama3.2": {"name": "llama3.2", "label": "Llama 3.2", "specialty": "general"},
     "codellama": {"name": "codellama", "label": "Code Llama", "specialty": "code"},
@@ -84,6 +121,7 @@ class ReviewResponse(BaseModel):
     duration_seconds: float
 
 
+# ── Routes ────────────────────────────────────────────
 @app.get("/")
 def root():
     return {"service": "ai-code-reviewer", "version": "3.0.0", "status": "running"}
@@ -121,6 +159,7 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
         f"Réponds en français de façon structurée et concise."
     )
 
+    REVIEWS_IN_PROGRESS.inc()
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -130,9 +169,13 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
             data = response.json()
             analysis = data.get("response", "Erreur lors de l'analyse")
     except Exception as e:
+        OLLAMA_ERRORS.labels(model=model).inc()
         analysis = f"Ollama non disponible: {str(e)}"
+    finally:
+        REVIEWS_IN_PROGRESS.dec()
 
     duration = round(time.time() - start_time, 2)
+    CODE_SIZE.observe(len(request.code))
 
     # ── Sauvegarder en PostgreSQL ──
     record = ReviewRecord(
@@ -157,6 +200,10 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
             mlflow.log_metric("review_id", record.id)
     except Exception:
         pass
+
+    # ── Métriques Prometheus custom ──
+    REVIEWS_TOTAL.labels(language=request.language, model=model).inc()
+    REVIEW_DURATION.labels(model=model).observe(duration)
 
     return ReviewResponse(
         id=record.id,
