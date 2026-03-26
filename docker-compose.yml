@@ -125,16 +125,18 @@ services:
       - reviewer-net
     ports:
       - "9100:9100"
+    pid: "host"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     command:
       - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
       - "--path.sysfs=/host/sys"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     restart: unless-stopped
-
+    
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
