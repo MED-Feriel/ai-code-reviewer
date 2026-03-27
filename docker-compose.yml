@@ -45,6 +45,7 @@ services:
       --port 5000
       --backend-store-uri sqlite:///mlflow/mlflow.db
       --default-artifact-root /mlflow/artifacts
+      --static-prefix /mlflow
     restart: unless-stopped
 
   api-ai:
@@ -93,6 +94,8 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
+      - "--web.external-url=/prometheus"
+      - "--web.route-prefix=/prometheus"
     restart: unless-stopped
 
   grafana:
@@ -109,6 +112,9 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=213.250.150.11
+      - GF_SERVER_ROOT_URL=http://213.250.150.11/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     depends_on:
       - prometheus
     restart: unless-stopped
