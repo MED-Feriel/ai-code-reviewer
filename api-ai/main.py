@@ -8,6 +8,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Histogram, Gauge
 import httpx
 import mlflow
+import logging
+import json
+import socket
 import os
 import time
 
@@ -46,6 +49,8 @@ CODE_SIZE = Histogram(
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reviews.db")
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+LOGSTASH_HOST = os.getenv("LOGSTASH_HOST", "logstash")
+LOGSTASH_PORT = int(os.getenv("LOGSTASH_PORT", "5000"))
 
 # ── Database ──────────────────────────────────────────
 engine = create_engine(DATABASE_URL)
@@ -74,6 +79,37 @@ def get_db():
     finally:
         db.close()
 
+
+# ── Logstash Handler ──────────────────────────────────
+class LogstashHandler(logging.Handler):
+    def __init__(self, host=LOGSTASH_HOST, port=LOGSTASH_PORT):
+        super().__init__()
+        self.host = host
+        self.port = port
+
+    def emit(self, record):
+        try:
+            log_entry = json.dumps({
+                "service": "api-ai",
+                "service_name": "api-ai",
+                "level": record.levelname.lower(),
+                "message": record.getMessage(),
+                "timestamp": datetime.utcnow().isoformat(),
+                "project": "ai-code-reviewer"
+            })
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(2)
+                s.connect((self.host, self.port))
+                s.send((log_entry + "\n").encode())
+        except Exception:
+            pass
+
+
+# ── Logger ────────────────────────────────────────────
+logger = logging.getLogger("api-ai")
+logger.setLevel(logging.INFO)
+logstash_handler = LogstashHandler()
+logger.addHandler(logstash_handler)
 
 # ── MLflow ────────────────────────────────────────────
 try:
@@ -124,6 +160,7 @@ class ReviewResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────
 @app.get("/")
 def root():
+    logger.info("Root endpoint called")
     return {"service": "ai-code-reviewer", "version": "3.0.0", "status": "running"}
 
 
@@ -149,6 +186,8 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
     start_time = time.time()
     model = request.model if request.model in AVAILABLE_MODELS else "llama3.2"
 
+    logger.info(f"Review started: language={request.language} model={model} code_length={len(request.code)}")
+
     prompt = (
         f"Tu es un expert en revue de code. Analyse ce code {request.language} et fournis:\n"
         f"1. Un résumé de ce que fait le code\n"
@@ -171,6 +210,7 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
     except Exception as e:
         OLLAMA_ERRORS.labels(model=model).inc()
         analysis = f"Ollama non disponible: {str(e)}"
+        logger.error(f"Ollama error: model={model} error={str(e)}")
     finally:
         REVIEWS_IN_PROGRESS.dec()
 
@@ -204,6 +244,12 @@ async def review_code(request: ReviewRequest, db: Session = Depends(get_db)):
     # ── Métriques Prometheus custom ──
     REVIEWS_TOTAL.labels(language=request.language, model=model).inc()
     REVIEW_DURATION.labels(model=model).observe(duration)
+
+    # ── Log vers Logstash ──
+    logger.info(
+        f"Review completed: id={record.id} language={request.language} "
+        f"model={model} duration={duration}s"
+    )
 
     return ReviewResponse(
         id=record.id,
