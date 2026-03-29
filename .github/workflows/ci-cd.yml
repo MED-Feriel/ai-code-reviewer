@@ -2,7 +2,7 @@ name: "CI/CD - AI Code Reviewer"
 
 on:
   push:
-    branches: [main, feature/ai-code-reviewer, feature/multi-models]
+    branches: [main, feature/ai-code-reviewer, feature/multi-models, feature/elk-stack]
   pull_request:
     branches: [main]
 
